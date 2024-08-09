@@ -1,0 +1,114 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Install environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Test and debug logs
+*.log
+
+# Flask/SQLAlchemy
+instance/
+.webassets-cache
+
+# Scrapy
+.scrapy
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Sphinx documentation
+docs/_build/
+target/
+
+# PyBuilder
+target/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*~
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# pyenv
+.python-version
+
+# dotenv
+.env
+
+# virtualenv
+pip-selfcheck.json
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Packaging
+*.distr
+*.whl
+*.deb
+*.rpm
+*.tar.gz
+*.zip
+*.tar.bz2
+*.msi
+*.mpkg
+
+# Secrets
+*.pem
+*.enc
+*.key
+
+# vscode
+.vscode/
+
+# tests
+tests/
+
