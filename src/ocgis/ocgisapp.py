@@ -3,14 +3,57 @@ import arcgis
 from lxml import html
 import re
 from .attribute_maps import NEW_ATTRIBUTE_MAP
-from datetime import datetime
+from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.edge.service import Service
+from selenium.webdriver.edge.options import Options
+from selenium.webdriver.common.by import By
+
 LOGGER = logging.getLogger(__name__)
 
 DATE_FORMAT = '%m/%d/%y %I:%M %p'
 
-def _website_navigation(username: str, password: str) -> str:
-    pass
+def _website_navigation(driver: webdriver.Edge, username: str, password: str, login_url: str, update_range: int) -> str:
+    """Navigate to legacy site page to get ticket data.
+
+    Returns:
+        str: html content of website.
+    """    
+
+    driver.get(login_url)
+    driver.find_element(
+        By.XPATH, '//*[@id="username"]').send_keys(username)
+    driver.find_element(
+        By.XPATH, '//*[@name="password"]').send_keys(password)
+    driver.find_element(By.XPATH, '//*[@id="btn-login"]').click()
+    driver.get("https://ia.itic.occinc.com/legacyApplication")
+    driver.get("https://ia.itic.occinc.com/iarecApp/servlet/Login?enc=zyfGx9MlUXnIWnwgDj%2BZiRogVJ1R215Lv3ldmSL6HqerScjlqNXM0NfCofWhgsBA%2F8v3Qc%2FybibEMwaN%2Bu%2F3ZhhiUzpdbS0s7pzIDYWfZIrbNxpPaE0LctfqPuWZ%2FVUn")
+
+    textbox = driver.find_element(By.XPATH, '//input[@id="auditStartDate"]')
+    textbox.clear()
+    textbox.send_keys((datetime.now(
+    ) - timedelta(days=update_range)).strftime('%Y-%m-%d'))
+    textbox = driver.find_element(By.XPATH, '//input[@id="auditEndDate"]')
+    textbox.clear()
+    textbox.send_keys(datetime.now().strftime('%Y-%m-%d'))
+    # Click ticket search button
+    driver.find_element(By.XPATH, '//input[@value="Show Tickets"]').click()
+
+    driver.execute_script("javascript:popupTktInfo('printTickets.jsp')")
+    main_window = driver.current_window_handle
+
+    # Get handles of all open windows
+    all_windows = driver.window_handles
+
+    # Switch to the new window (assuming it is the second one)
+    for window in all_windows:
+        if window != main_window:
+            driver.switch_to.window(window)
+            break
+    tickets_content = driver.page_source
+    return tickets_content
+
 
 def convert_geometry_rings(coordinates):
     """Converts latitude/longitude coordinates to webmercator projection.
@@ -144,7 +187,6 @@ def _content_parsing(html_content: str, attribute_map: dict, districts: list, cl
     dictionary_format['geometry']['rings'] = convert_geometry_rings(geometry_rings)
     return dictionary_format
     
-
 def _stage_changes(ticket_dictionary: dict, layer: arcgis.features.FeatureLayer) -> dict:
     """
     Stage changes for a ticket by determining whether it should be added, updated, or deleted in the feature layer.
@@ -190,7 +232,6 @@ def _stage_changes(ticket_dictionary: dict, layer: arcgis.features.FeatureLayer)
     except KeyError:
         LOGGER.exception(f"KeyError: 'ticketNumber' is missing from ticket dictionary.")
         raise
-
 
 def _ticket_exists(layer: arcgis.features.FeatureLayer, ticket_number: str) -> bool:
     """
@@ -262,18 +303,24 @@ def _object_id_from_ticket_number(ticket_number: str | int, layer: arcgis.featur
 
 
 class OcGisApp:
-    def __init__(self, arcgis_username: str, arcgis_password: str, layer_url: str, onecall_username: str, onecall_password: str, districts: list, closed_statuses=["Closed, Marked"]):
+    def __init__(self, arcgis_username: str, arcgis_password: str, arcgis_link: str, layer_url: str, onecall_username: str, onecall_password: str, onecall_login_url: str, districts: list, driver_executable_path: str, headless=False, closed_statuses=["Closed, Marked"]):
         self.arcgis_username = arcgis_username
         self.arcgis_password = arcgis_password
+        self.arcgis_link = arcgis_link
         self.layer_url = layer_url
         self.onecall_username = onecall_username
         self.onecall_password = onecall_password
         self.closed_statuses = closed_statuses
         self.districts = districts
-        self._setup()
+        self._setup(headless, driver_executable_path)
     
-    def _setup(self):
-        self.gis = arcgis.GIS('https://www.arcgis.com', self.arcgis_username, self.arcgis_password)
+      
+        
+    
+    def _setup(self, headless: bool, driver_executable_path: str):
+        
+        # ----- Set up arcgis -----
+        self.gis = arcgis.GIS(self.arcgis_link, self.arcgis_username, self.arcgis_password)
         self.layer = arcgis.features.FeatureLayer(self.layer_url, self.gis)
         self.spatial_reference = self.layer.properties['extent']['spatialReference']['wkid']
         self.feature_dictionary = {
@@ -287,6 +334,19 @@ class OcGisApp:
                 }
             }
         }
+        
+        # ----- Set up webdriver -----
+        driver_options = Options()
+        if headless:
+            driver_options.add_argument('--headless')
+        driver_options.add_argument('--log-level=3')
+        driver_options.add_argument(
+            'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+        driver_service = Service(executable_path=driver_executable_path)
+        self.webdriver = webdriver.Edge(options=driver_options,
+                                service=driver_service, keep_alive=True)
+        self.webdriver.implicitly_wait(20)
+        
         
     def run(self):
         LOGGER.info('Start run.')
