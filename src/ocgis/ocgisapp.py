@@ -5,7 +5,6 @@ import re
 from .attribute_maps import NEW_ATTRIBUTE_MAP
 from datetime import datetime
 from bs4 import BeautifulSoup
-from pyproj import Transformer
 LOGGER = logging.getLogger(__name__)
 
 DATE_FORMAT = '%m/%d/%y %I:%M %p'
@@ -13,28 +12,31 @@ DATE_FORMAT = '%m/%d/%y %I:%M %p'
 def _website_navigation(username: str, password: str) -> str:
     pass
 
-def convert_geometry_rings(rings, target_spatial_reference=3857, source_spatial_reference=4326):
-    """
-    Convert a list of geometry rings from the source spatial reference to the target spatial reference.
-    
-    :param rings: List of lists representing the geometry rings (coordinates) in the source spatial reference.
-    :param target_spatial_reference: Target spatial reference WKID (default is Web Mercator).
-    :param source_spatial_reference: Source spatial reference WKID (default is WGS 84).
-    :return: List of lists representing the geometry rings in the target spatial reference.
-    """
-    if not rings:
-        raise ValueError("The list of rings cannot be empty.")
-    
-    # Create a transformer object for coordinate transformation
-    transformer = Transformer.from_crs(source_spatial_reference, target_spatial_reference, always_xy=True)
+def convert_geometry_rings(coordinates):
+    """Converts latitude/longitude coordinates to webmercator projection.
 
-    def transform_ring(ring):
-        return [transformer.transform(x, y) for x, y in ring]
-    
-    # Transform each ring in the list
-    transformed_rings = [transform_ring(ring) for ring in rings]
-    
-    return transformed_rings
+    Args:
+        coordinates (list): List containing lists of points, potentially for multiple
+        geometries - e.g. [[[x1, y1], [x2, y2]], [[a1, b1], [a2, b2]]]
+
+    Returns:
+        list: List containing lists of points, potentially for multiple
+        geometries - e.g. [[[x1, y1], [x2, y2]], [[a1, b1], [a2, b2]]]
+    """
+    final_points = []
+    for polygon in coordinates:
+        webmercator_points = []
+        for lat, lon in polygon:
+            # Create a Point geometry with WGS84 coordinates
+            wgs_point = arcgis.geometry.Point(
+                {"x": lon, "y": lat, "spatialReference": {"wkid": 4326}})
+            # Project the point to Web Mercator (wkid 3857)
+            webmercator_point = wgs_point.project_as(arcgis.geometry.SpatialReference(3857))
+
+            webmercator_points.append(
+                [webmercator_point.x, webmercator_point.y])
+        final_points.append(webmercator_points)
+    return final_points
 
 def _content_parsing(html_content: str, attribute_map: dict, districts: list, closed_statuses: list, dictionary_format: dict, spatial_reference: int) -> dict:
     # Function to find a table by headers using partial matching
@@ -139,9 +141,8 @@ def _content_parsing(html_content: str, attribute_map: dict, districts: list, cl
     attributes['lastAutomaticUpdate'] = datetime.now().strftime(DATE_FORMAT)
 
     dictionary_format['attributes'] = attributes
-    dictionary_format['geometry']['rings'] = geometry_rings
-    final_dictionary = convert_geometry_rings(dictionary_format, spatial_reference)
-    return final_dictionary
+    dictionary_format['geometry']['rings'] = convert_geometry_rings(geometry_rings)
+    return dictionary_format
     
 
 def _stage_changes(ticket_dictionary: dict, layer: arcgis.features.FeatureLayer) -> dict:
