@@ -187,7 +187,7 @@ def _content_parsing(html_content: str, attribute_map: dict, districts: list, cl
     dictionary_format['geometry']['rings'] = convert_geometry_rings(geometry_rings)
     return dictionary_format
     
-def _stage_changes(ticket_dictionary: dict, layer: arcgis.features.FeatureLayer) -> dict:
+def _stage_changes(ticket_dictionary: dict, layer: arcgis.features.FeatureLayer, adds: list, deletes: list, updates: list):
     """
     Stage changes for a ticket by determining whether it should be added, updated, or deleted in the feature layer.
 
@@ -218,7 +218,6 @@ def _stage_changes(ticket_dictionary: dict, layer: arcgis.features.FeatureLayer)
         # Create feature
         feature = arcgis.features.Feature(ticket_dictionary['geometry'], ticket_dictionary['attributes'])
         
-        adds, deletes, updates = [], [], []
         if feature in adds or feature in deletes or feature in updates:
             LOGGER.info(f"Duplicate ticket '{ticket_number}' found.")
         elif _ticket_exists(layer, ticket_number):
@@ -228,7 +227,7 @@ def _stage_changes(ticket_dictionary: dict, layer: arcgis.features.FeatureLayer)
             adds.append(feature)
             LOGGER.info(f"Add ticket '{ticket_number}'.")
         
-        return adds, deletes, updates
+        
     except KeyError:
         LOGGER.exception(f"KeyError: 'ticketNumber' is missing from ticket dictionary.")
         raise
@@ -322,8 +321,6 @@ class OcGisApp:
     def _setup(self, headless: bool, driver_executable_path: str):
         
         # ----- Set up arcgis -----
-        print(self.arcgis_username)
-        print(self.arcgis_password)
         self.gis = arcgis.GIS(self.arcgis_link, self.arcgis_username, self.arcgis_password)
         self.layer = arcgis.features.FeatureLayer(self.layer_url, self.gis)
         self.spatial_reference = self.layer.properties['extent']['spatialReference']['wkid']
@@ -358,15 +355,19 @@ class OcGisApp:
         # maybe convert to a needed data type here
         tickets_content = tickets_page_content.split('<h1 style="text-align:center;">Iowa One Call</h1>')[1:]
         
+        adds, deletes, updates = [], [], []
         for ticket_content in tickets_content:
             ticket_dictionary = _content_parsing(html_content=ticket_content, 
                                                  attribute_map=NEW_ATTRIBUTE_MAP, 
                                                  districts=self.districts, 
-                                                 dictionary_format=self.feature_dictionary)
-            adds, deletes, updates = _stage_changes(ticket_dictionary)
-        result = self.layer.edit_features(adds=arcgis.features.FeatureSet(adds), updates=arcgis.features.FeatureSet(updates), deletes=arcgis.features.FeatureSet(deletes))
+                                                 dictionary_format=self.feature_dictionary,
+                                                 spatial_reference=self.spatial_reference,
+                                                 closed_statuses=self.closed_statuses)
+            _stage_changes(ticket_dictionary=ticket_dictionary, layer=self.layer, adds=adds, deletes=deletes, updates=updates)
+        result = self.layer.edit_features(adds=adds, updates=updates, deletes=deletes)
         
         remaining_open_tickets = self.layer.query(where="status = 'OPEN'")
+        LOGGER.debug(remaining_open_tickets)
         
         LOGGER.info('End run.')
         
