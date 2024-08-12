@@ -303,7 +303,7 @@ def _object_id_from_ticket_number(ticket_number: str | int, layer: arcgis.featur
 
 
 class OcGisApp:
-    def __init__(self, arcgis_username: str, arcgis_password: str, arcgis_link: str, layer_url: str, onecall_username: str, onecall_password: str, onecall_login_url: str, districts: list, driver_executable_path: str, headless=False, closed_statuses=["Closed, Marked"]):
+    def __init__(self, arcgis_username: str, arcgis_password: str, arcgis_link: str, layer_url: str, onecall_username: str, onecall_password: str, onecall_login_url: str, districts: list, driver_executable_path: str, update_range: int, headless=False, closed_statuses=["Closed, Marked"]):
         self.arcgis_username = arcgis_username
         self.arcgis_password = arcgis_password
         self.arcgis_link = arcgis_link
@@ -312,6 +312,8 @@ class OcGisApp:
         self.onecall_password = onecall_password
         self.closed_statuses = closed_statuses
         self.districts = districts
+        self.onecall_login_url = onecall_login_url
+        self.update_range = update_range
         self._setup(headless, driver_executable_path)
     
       
@@ -320,6 +322,8 @@ class OcGisApp:
     def _setup(self, headless: bool, driver_executable_path: str):
         
         # ----- Set up arcgis -----
+        print(self.arcgis_username)
+        print(self.arcgis_password)
         self.gis = arcgis.GIS(self.arcgis_link, self.arcgis_username, self.arcgis_password)
         self.layer = arcgis.features.FeatureLayer(self.layer_url, self.gis)
         self.spatial_reference = self.layer.properties['extent']['spatialReference']['wkid']
@@ -350,14 +354,17 @@ class OcGisApp:
         
     def run(self):
         LOGGER.info('Start run.')
-        tickets_page_content = _website_navigation(self.onecall_username, self.onecall_password)
-        # maybe convert to a needed data type
-        tickets_content = [] # split content by Iowa One Call header to get list of content for eah individual ticket
+        tickets_page_content = _website_navigation(driver=self.webdriver, username=self.onecall_username, password=self.onecall_password, login_url=self.onecall_login_url, update_range=self.update_range)
+        # maybe convert to a needed data type here
+        tickets_content = tickets_page_content.split('<h1 style="text-align:center;">Iowa One Call</h1>')[1:]
         
         for ticket_content in tickets_content:
-            ticket_dictionary = _content_parsing(ticket_content)
+            ticket_dictionary = _content_parsing(html_content=ticket_content, 
+                                                 attribute_map=NEW_ATTRIBUTE_MAP, 
+                                                 districts=self.districts, 
+                                                 dictionary_format=self.feature_dictionary)
             adds, deletes, updates = _stage_changes(ticket_dictionary)
-        self.layer.edit_features(adds=arcgis.features.FeatureSet(adds), updates=arcgis.features.FeatureSet(updates), deletes=arcgis.features.FeatureSet(deletes))
+        result = self.layer.edit_features(adds=arcgis.features.FeatureSet(adds), updates=arcgis.features.FeatureSet(updates), deletes=arcgis.features.FeatureSet(deletes))
         
         remaining_open_tickets = self.layer.query(where="status = 'OPEN'")
         
