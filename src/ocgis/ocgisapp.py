@@ -365,9 +365,10 @@ class OcGisApp:
                                                  closed_statuses=self.closed_statuses)
             _stage_changes(ticket_dictionary=ticket_dictionary, layer=self.layer, adds=adds, deletes=deletes, updates=updates)
         result = self.layer.edit_features(adds=adds, updates=updates, deletes=deletes)
+        LOGGER.info(f"Edit results: adds: {len(result['addResults'])}, updates: {len(result['updateResults'])}, deletes: {len(result['deleteResults'])}")
         
         remaining_open_tickets = self.layer.query(where="status = 'OPEN'")
-        LOGGER.debug(remaining_open_tickets)
+        LOGGER.debug(f"Remaining open tickets: {len(remaining_open_tickets)}.")
         
         LOGGER.info('End run.')
         
