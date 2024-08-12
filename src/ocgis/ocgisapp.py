@@ -299,6 +299,8 @@ class OcGisApp:
             adds, deletes, updates = _stage_changes(ticket_dictionary)
         self.layer.edit_features(adds=arcgis.features.FeatureSet(adds), updates=arcgis.features.FeatureSet(updates), deletes=arcgis.features.FeatureSet(deletes))
         
+        remaining_open_tickets = self.layer.query(where="status = 'OPEN'")
+        
         LOGGER.info('End run.')
         
         
@@ -306,7 +308,8 @@ class OcGisApp:
         LOGGER.debug('Start test')
         
         for key, attribute in _content_parsing(string, NEW_ATTRIBUTE_MAP, self.districts, self.closed_statuses, self.feature_dictionary, self.spatial_reference).items():
-            print(f'{key}: {attribute}')
+            if(key != 'geometry'):
+                print(f'{key}: {attribute}')
         
         LOGGER.debug('End test')
         
