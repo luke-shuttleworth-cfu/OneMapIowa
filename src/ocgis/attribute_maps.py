@@ -29,10 +29,6 @@ NEW_ATTRIBUTE_MAP = {
     "extentOfWork": '//td[text()="Location of Work:"]/following-sibling::td/span[last()]',
     "remarks": '//span[text()="Remarks:"]/following-sibling::span[last()]',
     "deadline": '//span[text()="Locates shall be completed no later than:"]/following-sibling::span[last()]',
-    "cf1": None,
-    "cf2": None,
-    "cf3": None,
-    "cf8": None,
     "status": None,
     "lastAutomaticUpdate": None
 }
