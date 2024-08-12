@@ -1,12 +1,15 @@
 import logging
 import arcgis
+from lxml import html
+from attribute_maps import NEW_ATTRIBUTE_MAP
 LOGGER = logging.getLogger(__name__)
 
 def _website_navigation(username: str, password: str) -> str:
     pass
 
 def _content_parsing(content: str) -> dict:
-    pass
+    tree = html.fromstring(content)
+    
 
 def _stage_changes(ticket_dictionary: dict, layer: arcgis.features.FeatureLayer) -> dict:
     """
