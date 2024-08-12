@@ -1,14 +1,147 @@
 import logging
 import arcgis
 from lxml import html
-from attribute_maps import NEW_ATTRIBUTE_MAP
+import re
+from .attribute_maps import NEW_ATTRIBUTE_MAP
+from datetime import datetime
+from bs4 import BeautifulSoup
+from pyproj import Transformer
 LOGGER = logging.getLogger(__name__)
+
+DATE_FORMAT = '%m/%d/%y %I:%M %p'
 
 def _website_navigation(username: str, password: str) -> str:
     pass
 
-def _content_parsing(content: str) -> dict:
-    tree = html.fromstring(content)
+def convert_geometry_rings(rings, target_spatial_reference=3857, source_spatial_reference=4326):
+    """
+    Convert a list of geometry rings from the source spatial reference to the target spatial reference.
+    
+    :param rings: List of lists representing the geometry rings (coordinates) in the source spatial reference.
+    :param target_spatial_reference: Target spatial reference WKID (default is Web Mercator).
+    :param source_spatial_reference: Source spatial reference WKID (default is WGS 84).
+    :return: List of lists representing the geometry rings in the target spatial reference.
+    """
+    if not rings:
+        raise ValueError("The list of rings cannot be empty.")
+    
+    # Create a transformer object for coordinate transformation
+    transformer = Transformer.from_crs(source_spatial_reference, target_spatial_reference, always_xy=True)
+
+    def transform_ring(ring):
+        return [transformer.transform(x, y) for x, y in ring]
+    
+    # Transform each ring in the list
+    transformed_rings = [transform_ring(ring) for ring in rings]
+    
+    return transformed_rings
+
+def _content_parsing(html_content: str, attribute_map: dict, districts: list, closed_statuses: list, dictionary_format: dict, spatial_reference: int) -> dict:
+    # Function to find a table by headers using partial matching
+    def _find_table_by_headers(tree, target_headers):
+        for table in tree.xpath('//table'):
+            # Extract headers of the current table
+            headers = set(table.xpath('.//th/text()'))
+            # Check if all target headers are contained within the table's headers
+            if target_headers.issubset(headers):
+                # Convert table to a list of dictionaries
+                headers = table.xpath('.//th/text()')  # Re-fetch headers to maintain order
+                table_data = []
+                for row in table.xpath('.//tbody/tr'):
+                    cells = row.xpath('td/text()')
+                    row_dict = dict(zip(headers, cells))
+                    table_data.append(row_dict)
+                return table_data
+        LOGGER.debug(f"No table found for headers '{target_headers}'.")
+        return None
+    
+    tree = html.fromstring(html_content)
+    soup = BeautifulSoup(html_content, 'html.parser')
+    
+    
+    # ----- Get attribute data -----
+    attributes = {}
+    
+    
+    # Get value for each attribute in the attribute map using the xpaths
+    for attribute, identifier in attribute_map.items():
+        try:
+            content = tree.xpath(f'{identifier}/text()')
+            if identifier:
+                if type(content) == list and len(content) > 0:
+                    content = content[0]
+                else:
+                    content = ''
+                attributes[attribute] = re.sub(r'\s+', ' ', content).strip()
+            else:
+                LOGGER.debug(f"No xpath expression for '{attribute}'.")
+        except Exception:
+            LOGGER.exception(f"Error finding value for '{attribute}'")
+    
+    
+    
+    # ----- Get statuses -----
+    
+    target_headers = {'District', 'Company Name', 'Status'}
+    status_dictionary = _find_table_by_headers(tree, target_headers)
+    
+    ticket_open = False
+    # Check statuses, if any are still open mark ticket as opened and if CFU then update attributes.
+    for status_row in status_dictionary:
+        if status_row['District'].lower() in districts:
+            attributes[status_row['District'].lower()] = status_row['Status']
+        if status_row['Status'] not in closed_statuses:
+            ticket_open = True
+        
+    if ticket_open:
+        attributes['status'] = 'OPEN'
+    else:
+        attributes['status'] = 'CLOSED'
+        
+    
+    
+    
+    # ----- Get polygon information -----
+    
+    # Find all divs with class "pure-u-md-1-1" containing polygon headers
+    polygon_headers = soup.find_all('div', class_='pure-u-md-1-1')
+    geometry_rings= []
+    # Iterate through each polygon header
+    for header in polygon_headers:
+        polygon_data = []
+        # Find the <b> tag within the header
+        polygon_number_tag = header.find('b')
+        if polygon_number_tag:
+            # Get the polygon number from the <b> tag text
+            polygon_number = polygon_number_tag.text.strip().replace(':', '')
+
+            # Find all following divs until the next polygon header or end of parent div
+            next_element = header.find_next_sibling()
+            # stop when next header is found
+            while next_element and not next_element.find('b', string=True):
+                if next_element.name == 'div' and 'pure-u-md-1-3' in next_element['class']:
+                    text = next_element.get_text().strip()
+                    if text.startswith('(') and text.endswith(')'):
+                        # Remove parentheses and split by comma
+                        coordinates = text[1:-1].strip().split(',')
+                        # Convert to float and append to polygon_data
+                        polygon_data.append([float(coord.strip())
+                                            for coord in coordinates])
+                next_element = next_element.find_next_sibling()
+
+            # Append polygon_data to all_polygons if it has any points
+            if polygon_data:
+                geometry_rings.append(polygon_data)
+    
+    
+    # ----- Return dictionary -----
+    
+    attributes['lastAutomaticUpdate'] = datetime.now().strftime(DATE_FORMAT)
+
+    dictionary_format['attributes'] = attributes
+    dictionary_format['geometry']['rings'] = geometry_rings
+    final_dictionary = convert_geometry_rings(dictionary_format, spatial_reference)
+    return final_dictionary
     
 
 def _stage_changes(ticket_dictionary: dict, layer: arcgis.features.FeatureLayer) -> dict:
@@ -128,20 +261,34 @@ def _object_id_from_ticket_number(ticket_number: str | int, layer: arcgis.featur
 
 
 class OcGisApp:
-    def __init__(self, arcgis_username: str, arcgis_password: str, layer_url: str, onecall_username: str, onecall_password: str):
+    def __init__(self, arcgis_username: str, arcgis_password: str, layer_url: str, onecall_username: str, onecall_password: str, districts: list, closed_statuses=["Closed, Marked"]):
         self.arcgis_username = arcgis_username
         self.arcgis_password = arcgis_password
         self.layer_url = layer_url
         self.onecall_username = onecall_username
         self.onecall_password = onecall_password
+        self.closed_statuses = closed_statuses
+        self.districts = districts
         self._setup()
     
     def _setup(self):
         self.gis = arcgis.GIS('https://www.arcgis.com', self.arcgis_username, self.arcgis_password)
         self.layer = arcgis.features.FeatureLayer(self.layer_url, self.gis)
+        self.spatial_reference = self.layer.properties['extent']['spatialReference']['wkid']
+        self.feature_dictionary = {
+            'attributes': None,
+            'geometry': {
+                "rings": None,
+                "spatialReference": {
+                    # Example WKID for Web Mercator (WGS84)
+                    "wkid": self.spatial_reference,
+                    "latestWkid": self.layer.properties['extent']['spatialReference']['latestWkid']
+                }
+            }
+        }
         
     def run(self):
-        LOGGER.info('Start run')
+        LOGGER.info('Start run.')
         tickets_page_content = _website_navigation(self.onecall_username, self.onecall_password)
         # maybe convert to a needed data type
         tickets_content = [] # split content by Iowa One Call header to get list of content for eah individual ticket
@@ -151,5 +298,14 @@ class OcGisApp:
             adds, deletes, updates = _stage_changes(ticket_dictionary)
         self.layer.edit_features(adds=arcgis.features.FeatureSet(adds), updates=arcgis.features.FeatureSet(updates), deletes=arcgis.features.FeatureSet(deletes))
         
-        LOGGER.info('End run')
+        LOGGER.info('End run.')
+        
+        
+    def test(self, string):
+        LOGGER.debug('Start test')
+        
+        for key, attribute in _content_parsing(string, NEW_ATTRIBUTE_MAP, self.districts, self.closed_statuses, self.feature_dictionary, self.spatial_reference).items():
+            print(f'{key}: {attribute}')
+        
+        LOGGER.debug('End test')
         
