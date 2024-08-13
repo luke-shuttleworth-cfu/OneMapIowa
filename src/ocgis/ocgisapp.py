@@ -135,7 +135,8 @@ def _content_parsing(html_content: str, attribute_map: dict, districts: list, cl
                     content = ''
                 attributes[attribute] = re.sub(r'\s+', ' ', content).strip()
             else:
-                LOGGER.debug(f"No xpath expression for '{attribute}'.")
+                #LOGGER.debug(f"No xpath expression for '{attribute}'.")
+                pass
         except Exception:
             LOGGER.exception(f"Error finding value for '{attribute}'")
     
@@ -237,6 +238,7 @@ def _stage_changes(ticket_dictionary: dict, layer: arcgis.features.FeatureLayer,
         if feature in adds or feature in deletes or feature in updates:
             LOGGER.info(f"Duplicate ticket '{ticket_number}' found.")
         elif _ticket_exists(layer, ticket_number):
+            feature.attributes['OBJECTID'] = _object_id_from_ticket_number(feature.attributes['ticketNumber'], layer)
             updates.append(feature)
             LOGGER.info(f"Update ticket '{ticket_number}'.")
         else:
@@ -289,7 +291,7 @@ def _object_id_from_ticket_number(ticket_number: str | int, layer: arcgis.featur
         # Ensure ticket_number is a string
         if isinstance(ticket_number, int):
             ticket_number = str(ticket_number)
-        elif not isinstance(ticket_number, str):
+        elif not isinstance(ticket_number, str) and not isinstance(ticket_number, int):
             raise TypeError("ticket_number must be a string or integer.")
         
         # Validate the ticket_number format (if needed)
@@ -297,7 +299,7 @@ def _object_id_from_ticket_number(ticket_number: str | int, layer: arcgis.featur
             raise ValueError("ticket_number must contain only digits.")
         
         # Query the FeatureLayer for the object ID
-        query = f"ticket_number_field = '{ticket_number}'"  # Replace 'ticket_number_field' with the actual field name in your layer
+        query = f"ticketNumber = '{ticket_number}'"  # Replace 'ticket_number_field' with the actual field name in your layer
         result = layer.query(where=query, return_fields="OBJECTID", return_count_only=False)
 
         # Check if any features are found
@@ -330,12 +332,14 @@ class OcGisApp:
         self.onecall_login_url = onecall_login_url
         self.update_range = update_range
         self.state = state
-        self._setup(headless, driver_executable_path)
+        self.headless = headless
+        self.driver_executable_path = driver_executable_path
+        self._setup()
     
       
         
     
-    def _setup(self, headless: bool, driver_executable_path: str):
+    def _setup(self):
         
         # ----- Set up arcgis -----
         self.gis = arcgis.GIS(self.arcgis_link, self.arcgis_username, self.arcgis_password)
@@ -353,22 +357,27 @@ class OcGisApp:
             }
         }
         
+        
+        
+        
+    def run(self):
+        LOGGER.info('Start run.')
+        
         # ----- Set up webdriver -----
         driver_options = Options()
-        if headless:
+        if self.headless:
             driver_options.add_argument('--headless')
         driver_options.add_argument('--log-level=3')
         driver_options.add_argument(
             'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
         #driver_options.add_argument("--kiosk-printing")
-        driver_service = Service(executable_path=driver_executable_path)
+        driver_service = Service(executable_path=self.driver_executable_path)
         self.webdriver = webdriver.Edge(options=driver_options,
                                 service=driver_service, keep_alive=True)
         self.webdriver.implicitly_wait(20)
         
+        # ----- Get current list from locator page -----
         
-    def run(self):
-        LOGGER.info('Start run.')
         tickets_page_content = _website_navigation(driver=self.webdriver, username=self.onecall_username, password=self.onecall_password, login_url=self.onecall_login_url, update_range=self.update_range)
         # maybe convert to a needed data type here
         tickets_content = tickets_page_content.split('<h1 style="text-align:center;">Iowa One Call</h1>')[1:]
@@ -402,11 +411,9 @@ class OcGisApp:
             ticket_number = ticket.attributes['ticketNumber']
             html_content = _single_ticket_lookup(self.webdriver, ticket_number, self.state)
             ticket_dictionary = _content_parsing(html_content, NEW_ATTRIBUTE_MAP, self.districts, self.closed_statuses, self.feature_dictionary, self.spatial_reference)
-            print(ticket_dictionary)
             _stage_changes(ticket_dictionary, self.layer, adds, deletes, updates)
         result = self.layer.edit_features(adds, updates, deletes)
         LOGGER.info(f"Open edit results: adds: {len(result['addResults'])}, updates: {len(result['updateResults'])}, deletes: {len(result['deleteResults'])}")
-        
         self.webdriver.quit()
         LOGGER.info('End run.')
         
