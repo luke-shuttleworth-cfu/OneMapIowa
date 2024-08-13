@@ -417,26 +417,3 @@ class OcGisApp:
         self.webdriver.quit()
         LOGGER.info('End run.')
         
-        
-    def test(self):
-        LOGGER.debug('Start test')
-        
-        where_clause = f"status = 'OPEN'"
-        
-        remaining_open_tickets = self.layer.query(where=where_clause)
-        LOGGER.debug(f"Remaining open tickets: {len(remaining_open_tickets)}.")
-        
-        adds, deletes, updates = [], [], []
-        for ticket in remaining_open_tickets.features:
-            ticket_number = ticket.attributes['ticketNumber']
-            html_content = _single_ticket_lookup(self.webdriver, ticket_number, self.state)
-            ticket_dictionary = _content_parsing(html_content, NEW_ATTRIBUTE_MAP, self.districts, self.closed_statuses, self.feature_dictionary, self.spatial_reference)
-            print(ticket_dictionary)
-            _stage_changes(ticket_dictionary, self.layer, adds, deletes, updates)
-        result = self.layer.edit_features(adds, updates, deletes)
-        LOGGER.info(f"Open edit results: adds: {len(result['addResults'])}, updates: {len(result['updateResults'])}, deletes: {len(result['deleteResults'])}")
-        
-        self.webdriver.quit()
-        
-        LOGGER.debug('End test')
-        
