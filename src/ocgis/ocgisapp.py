@@ -373,6 +373,8 @@ class OcGisApp:
         # maybe convert to a needed data type here
         tickets_content = tickets_page_content.split('<h1 style="text-align:center;">Iowa One Call</h1>')[1:]
         
+        
+        edited_tickets = []
         adds, deletes, updates = [], [], []
         for ticket_content in tickets_content:
             ticket_dictionary = _content_parsing(html_content=ticket_content, 
@@ -381,17 +383,26 @@ class OcGisApp:
                                                  dictionary_format=self.feature_dictionary,
                                                  spatial_reference=self.spatial_reference,
                                                  closed_statuses=self.closed_statuses)
+            edited_tickets.append(ticket_dictionary['attributes']['ticketNumber'])
             _stage_changes(ticket_dictionary=ticket_dictionary, layer=self.layer, adds=adds, deletes=deletes, updates=updates)
         result = self.layer.edit_features(adds=adds, updates=updates, deletes=deletes)
         LOGGER.info(f"Site edit results: adds: {len(result['addResults'])}, updates: {len(result['updateResults'])}, deletes: {len(result['deleteResults'])}")
+
+        # ----- Check remaining open tickets -----
         
-        remaining_open_tickets = self.layer.query(where="status = 'OPEN'")
+        # Construct the WHERE clause
+        excluded_ticket_numbers_str = "', '".join(edited_tickets)
+        where_clause = f"status = 'OPEN' AND ticketNumber NOT IN ('{excluded_ticket_numbers_str}')"
+        
+        remaining_open_tickets = self.layer.query(where=where_clause)
         LOGGER.debug(f"Remaining open tickets: {len(remaining_open_tickets)}.")
         
         adds, deletes, updates = [], [], []
-        for ticket in remaining_open_tickets:
-            ticket_number = ticket['attributes']['ticketNumber']
-            ticket_dictionary = _single_ticket_lookup(self.webdriver, ticket_number, self.state)
+        for ticket in remaining_open_tickets.features:
+            ticket_number = ticket.attributes['ticketNumber']
+            html_content = _single_ticket_lookup(self.webdriver, ticket_number, self.state)
+            ticket_dictionary = _content_parsing(html_content, NEW_ATTRIBUTE_MAP, self.districts, self.closed_statuses, self.feature_dictionary, self.spatial_reference)
+            print(ticket_dictionary)
             _stage_changes(ticket_dictionary, self.layer, adds, deletes, updates)
         result = self.layer.edit_features(adds, updates, deletes)
         LOGGER.info(f"Open edit results: adds: {len(result['addResults'])}, updates: {len(result['updateResults'])}, deletes: {len(result['deleteResults'])}")
@@ -402,11 +413,23 @@ class OcGisApp:
         
     def test(self):
         LOGGER.debug('Start test')
-        string = _single_ticket_lookup(self.webdriver, 552404783, self.state)
-        print(string)
-        for key, attribute in _content_parsing(string, NEW_ATTRIBUTE_MAP, self.districts, self.closed_statuses, self.feature_dictionary, self.spatial_reference).items():
-            if(key != 'geometry'):
-                print(f'{key}: {attribute}')
+        
+        where_clause = f"status = 'OPEN'"
+        
+        remaining_open_tickets = self.layer.query(where=where_clause)
+        LOGGER.debug(f"Remaining open tickets: {len(remaining_open_tickets)}.")
+        
+        adds, deletes, updates = [], [], []
+        for ticket in remaining_open_tickets.features:
+            ticket_number = ticket.attributes['ticketNumber']
+            html_content = _single_ticket_lookup(self.webdriver, ticket_number, self.state)
+            ticket_dictionary = _content_parsing(html_content, NEW_ATTRIBUTE_MAP, self.districts, self.closed_statuses, self.feature_dictionary, self.spatial_reference)
+            print(ticket_dictionary)
+            _stage_changes(ticket_dictionary, self.layer, adds, deletes, updates)
+        result = self.layer.edit_features(adds, updates, deletes)
+        LOGGER.info(f"Open edit results: adds: {len(result['addResults'])}, updates: {len(result['updateResults'])}, deletes: {len(result['deleteResults'])}")
+        
+        self.webdriver.quit()
         
         LOGGER.debug('End test')
         
