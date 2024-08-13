@@ -9,6 +9,8 @@ from selenium import webdriver
 from selenium.webdriver.edge.service import Service
 from selenium.webdriver.edge.options import Options
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import Select
+import time
 
 LOGGER = logging.getLogger(__name__)
 
@@ -54,7 +56,21 @@ def _website_navigation(driver: webdriver.Edge, username: str, password: str, lo
     tickets_content = driver.page_source
     return tickets_content
 
-
+def _single_ticket_lookup(driver: webdriver.Edge, ticket_number: int, state: str) -> str:
+    driver.get("https://ia.itic.occinc.com/iarecApp/ticketSearchAndStatusSelector.jsp")
+    
+    textbox = driver.find_element(By.XPATH, '//input[@id="ticketNumber"]')
+    textbox.clear()
+    textbox.send_keys(str(ticket_number))
+    
+    Select(driver.find_element(By.XPATH, '//select[@name="db"]')).select_by_visible_text(state)
+    
+    driver.find_element(By.XPATH, '//*[@name="Search"]').click()
+    driver.execute_script('window.matchMedia("print").matches = true;')
+    return driver.page_source
+    
+    
+    
 def convert_geometry_rings(coordinates):
     """Converts latitude/longitude coordinates to webmercator projection.
 
@@ -302,7 +318,7 @@ def _object_id_from_ticket_number(ticket_number: str | int, layer: arcgis.featur
 
 
 class OcGisApp:
-    def __init__(self, arcgis_username: str, arcgis_password: str, arcgis_link: str, layer_url: str, onecall_username: str, onecall_password: str, onecall_login_url: str, districts: list, driver_executable_path: str, update_range: int, headless=False, closed_statuses=["Closed, Marked"]):
+    def __init__(self, arcgis_username: str, arcgis_password: str, arcgis_link: str, layer_url: str, onecall_username: str, onecall_password: str, onecall_login_url: str, districts: list, driver_executable_path: str, update_range: int, state: str, headless=False, closed_statuses=["Closed, Marked"]):
         self.arcgis_username = arcgis_username
         self.arcgis_password = arcgis_password
         self.arcgis_link = arcgis_link
@@ -313,6 +329,7 @@ class OcGisApp:
         self.districts = districts
         self.onecall_login_url = onecall_login_url
         self.update_range = update_range
+        self.state = state
         self._setup(headless, driver_executable_path)
     
       
@@ -343,6 +360,7 @@ class OcGisApp:
         driver_options.add_argument('--log-level=3')
         driver_options.add_argument(
             'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+        #driver_options.add_argument("--kiosk-printing")
         driver_service = Service(executable_path=driver_executable_path)
         self.webdriver = webdriver.Edge(options=driver_options,
                                 service=driver_service, keep_alive=True)
@@ -365,17 +383,27 @@ class OcGisApp:
                                                  closed_statuses=self.closed_statuses)
             _stage_changes(ticket_dictionary=ticket_dictionary, layer=self.layer, adds=adds, deletes=deletes, updates=updates)
         result = self.layer.edit_features(adds=adds, updates=updates, deletes=deletes)
-        LOGGER.info(f"Edit results: adds: {len(result['addResults'])}, updates: {len(result['updateResults'])}, deletes: {len(result['deleteResults'])}")
+        LOGGER.info(f"Site edit results: adds: {len(result['addResults'])}, updates: {len(result['updateResults'])}, deletes: {len(result['deleteResults'])}")
         
         remaining_open_tickets = self.layer.query(where="status = 'OPEN'")
         LOGGER.debug(f"Remaining open tickets: {len(remaining_open_tickets)}.")
         
+        adds, deletes, updates = [], [], []
+        for ticket in remaining_open_tickets:
+            ticket_number = ticket['attributes']['ticketNumber']
+            ticket_dictionary = _single_ticket_lookup(self.webdriver, ticket_number, self.state)
+            _stage_changes(ticket_dictionary, self.layer, adds, deletes, updates)
+        result = self.layer.edit_features(adds, updates, deletes)
+        LOGGER.info(f"Open edit results: adds: {len(result['addResults'])}, updates: {len(result['updateResults'])}, deletes: {len(result['deleteResults'])}")
+        
+        self.webdriver.quit()
         LOGGER.info('End run.')
         
         
-    def test(self, string):
+    def test(self):
         LOGGER.debug('Start test')
-        
+        string = _single_ticket_lookup(self.webdriver, 552404783, self.state)
+        print(string)
         for key, attribute in _content_parsing(string, NEW_ATTRIBUTE_MAP, self.districts, self.closed_statuses, self.feature_dictionary, self.spatial_reference).items():
             if(key != 'geometry'):
                 print(f'{key}: {attribute}')
