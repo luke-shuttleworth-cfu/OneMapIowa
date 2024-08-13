@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ocgis"
+version = "1.0.0"
+description = "Import Iowa one call tickets into ArcGIS Online maps."
+authors = [
+    { name = "Luke Shuttleworth", email = "luke.shuttleworth@cfunet.net" }
+]
+readme = "README.md"
+license = { text = "MIT" }
+dependencies = [
+    "arcgis>=2.1.0",
+    "beautifulsoup4>=4.12.2",
+    "lxml>=4.9.3",
+    "selenium>=4.22.0",
+]
+
+[project.urls]
+"Source" = "https://github.com/luke-shuttleworth-cfu/OneMapIowa"
+
