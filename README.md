@@ -26,35 +26,35 @@
 - callType, ```String```
 - expirationDate,```Date```
 - callerName, ```String```
-- callerPhone
-- excavatorName
-- excavatorPhone
-- excavatorAddress
-- excavatorEmail
-- onsiteContact
-- onsitePhone
+- callerPhone, ```String```
+- excavatorName, ```String```
+- excavatorPhone, ```String```
+- excavatorAddress, ```String```
+- excavatorEmail, ```String```
+- onsiteContact, ```String```
+- onsitePhone, ```String```
 - beginWorkDate, ```Date```
-- workDuration
-- workType
-- workDoneFor
-- trenching
-- boring
-- plowing
-- backhoe
-- blasting
-- other
-- markedWhite
-- digCounty
-- digCity
-- digAddres
-- digAddressAt
-- extentOfWork
-- remarks
+- workDuration, ```String```
+- workType, ```String```
+- workDoneFor, ```String```
+- trenching, ```String```
+- boring, ```String```
+- plowing, ```String```
+- backhoe, ```String```
+- blasting, ```String```
+- other, ```String```
+- markedWhite, ```String```
+- digCounty, ```String```
+- digCity, ```String```
+- digAddres, ```String```
+- digAddressAt, ```String```
+- extentOfWork, ```String```
+- remarks, ```String```
 - deadline, ```Date```
-- status
+- status, ```String```
 - lastAutomaticUpdate, ```Date```
-- yourdistrict1
-- yourdistrict2
+- yourdistrict1, ```String```
+- yourdistrict2, ```String```
 
 ## Usage
 
