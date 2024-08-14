@@ -17,7 +17,7 @@
 3. **App**: Install the package for the app:
 
     ```bash
-    pip install ocgis
+    pip install ocgis-cfu
     ```
 
 4. **ArcGIS Online Map**: Create an ArcGIS Online map with the fields and types outlined below, in addition to your district statuses.
