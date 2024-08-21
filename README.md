@@ -113,14 +113,14 @@ The application uses the `logging` module for logging messages. Configure the lo
 
 ```toml
 [arcgis]
-username = "michael.ascher_cfu"
-password = "Sja1517rja!"
+username = "username"
+password = "password"
 link = "https://www.arcgis.com"
 layer_url = "https://services5.arcgis.com/g3r4E4Xlpygk5wEz/arcgis/rest/services/Locate_Tickets/FeatureServer/0"
 
 [onecall]
-username = "cfu-lshuttleworth"
-password = "LShuttleworth1!"
+username = "username"
+password = "password"
 login_url = "https://ia.itic.occinc.com/?isite=y&db=ia&disttrans=n&basetrans=n&trans_id=0&district_code=0&record_id=0&trans_state="
 closed_statuses = ["Clear", "Marked"]
 districts = ["cf1", "cf2", "cf3", "cf8"]
