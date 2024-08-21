@@ -116,7 +116,7 @@ The application uses the `logging` module for logging messages. Configure the lo
 username = "username"
 password = "password"
 link = "https://www.arcgis.com"
-layer_url = "https://services5.arcgis.com/g3r4E4Xlpygk5wEz/arcgis/rest/services/Locate_Tickets/FeatureServer/0"
+layer_url = "https://services5.arcgis.com/ncihegur63vjr/arcgis/rest/services/Locate_Tickets/FeatureServer/0"
 
 [onecall]
 username = "username"
